@@ -164,6 +164,8 @@ BBPlugin.register('vox_importer_greedy', {
                         // Sweep along X
                         for (let x = 0; x < sx; x++) {
                             for (let dir of [-1, 1]) {
+                                if ((dir === -1 && x === 0) || (dir === 1 && x === sx - 1)) continue;
+
                                 let grid = Array.from({ length: sz }, () => Array(sy).fill(null));
                                 for (let y = 0; y < sy; y++) {
                                     for (let z = 0; z < sz; z++) {
@@ -186,7 +188,9 @@ BBPlugin.register('vox_importer_greedy', {
 
                         // Sweep along Y
                         for (let y = 0; y < sy; y++) {
-                            for (let dir of [-1, 1]) {
+                            for (let dir of [1, -1]) {
+                                if ((dir === -1 && y === 0) || (dir === 1 && y === sy - 1)) continue;
+
                                 let grid = Array.from({ length: sz }, () => Array(sx).fill(null));
                                 for (let x = 0; x < sx; x++) {
                                     for (let z = 0; z < sz; z++) {
@@ -209,7 +213,7 @@ BBPlugin.register('vox_importer_greedy', {
 
                         // Sweep along Z
                         for (let z = 0; z < sz; z++) {
-                            for (let dir of [-1, 1]) {
+                            for (let dir of [1]) {
                                 let grid = Array.from({ length: sy }, () => Array(sx).fill(null));
                                 for (let x = 0; x < sx; x++) {
                                     for (let y = 0; y < sy; y++) {
