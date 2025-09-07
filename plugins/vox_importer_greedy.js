@@ -5,7 +5,7 @@
 let import_vox_action;
 let vox = {};
 
-BBPlugin.register('vox_importer', {
+BBPlugin.register('vox_importer_greedy', {
 	title: 'Voxel Importer - Greedy',
 	icon: 'view_module',
 	author: 'DigiNanigans',
@@ -21,10 +21,8 @@ BBPlugin.register('vox_importer', {
 			category: 'file',
 			condition: () => Project instanceof ModelProject,
 			click: function(ev) {
-		
-				var file_path;
+
 				function importVoxFile(cb) {
-		
 					Blockbench.import({
 						extensions: ['vox'],
 						type: 'Vox Model',
@@ -38,247 +36,233 @@ BBPlugin.register('vox_importer', {
 				importVoxFile(function(a, data) {
 					if (a) throw a
 					console.log(data)
-		
+
+                    const { x: sx, y: sy, z: sz } = data.size;
+
+                    function paletteToHex(p) {
+                        if (!p) return '#ffffff';
+                        return `#${((1 << 24) + (p.r << 16) + (p.g << 8) + p.b).toString(16).slice(1)}`;
+                    }
+
+                    function greedyMesh2D(grid, width, height) {
+                        let quads = [];
+                        let used = Array.from({ length: height }, () => Array(width).fill(false));
+                        for (let y = 0; y < height; y++) {
+                            for (let x = 0; x < width; x++) {
+                                if (used[y][x] || grid[y][x] == null) continue;
+                                let color = grid[y][x];
+
+                                let w = 1;
+                                while (x + w < width && !used[y][x + w] && grid[y][x + w] === color) w++;
+
+                                let h = 1, expand = true;
+                                while (y + h < height && expand) {
+                                    for (let k = 0; k < w; k++) {
+                                        if (used[y + h][x + k] || grid[y + h][x + k] !== color) { expand = false; break; }
+                                    }
+                                    if (expand) h++;
+                                }
+
+                                for (let dy = 0; dy < h; dy++) for (let dx = 0; dx < w; dx++) used[y + dy][x + dx] = true;
+
+                                quads.push({ x, y, w, h, color });
+                            }
+                        }
+                        return quads;
+                    }
+
+                    function collectQuadVerts(axis, sliceIndex, quad, dir) {
+
+                        const vsize = 1;
+                        const xOff = - (sx * vsize) / 2;
+                        const yOff = 0;
+                        const zOff = - (sy * vsize) / 2;
+
+                        let faceVerts = [];
+                        let faceName;
+
+                        if (axis === 'x') {
+                            const vx = sliceIndex, vy = quad.x, vz = quad.y;
+                            const X = vx * vsize;
+                            const Y1 = vz * vsize, Y2 = (vz + quad.h) * vsize;
+                            const Z1 = vy * vsize, Z2 = (vy + quad.w) * vsize;
+
+                            if (dir === -1) faceVerts = [[X,Y1,Z1],[X,Y2,Z1],[X,Y2,Z2],[X,Y1,Z2]]; // west
+                            else faceVerts = [[X+vsize,Y1,Z1],[X+vsize,Y1,Z2],[X+vsize,Y2,Z2],[X+vsize,Y2,Z1]]; // east
+                            faceName = dir===-1?'west':'east';
+
+                            if (dir === -1) faceVerts.reverse();
+
+                            // X faces: no Y/Z swap
+                            faceVerts = faceVerts.map(([X,Y,Z]) => [X + xOff, Y + yOff, Z + zOff]);
+
+                        } else if (axis === 'y') {
+                            const vy=sliceIndex, vx=quad.x, vz=quad.y;
+                            const X1=vx*vsize, X2=(vx+quad.w)*vsize;
+                            const Y=vy*vsize, Z1=vz*vsize, Z2=(vz+quad.h)*vsize;
+
+                            if(dir===-1) faceVerts=[[X1,Y,Z1],[X2,Y,Z1],[X2,Y,Z2],[X1,Y,Z2]]; // down
+                            else faceVerts=[[X1,Y+vsize,Z1],[X1,Y+vsize,Z2],[X2,Y+vsize,Z2],[X2,Y+vsize,Z1]]; // up
+                            faceName = dir===-1?'down':'up';
+
+                            if (dir === -1) faceVerts.reverse();
+
+                            // Y faces: swap Y/Z for Y-up
+                            faceVerts = faceVerts.map(([X,Y,Z]) => [X + xOff, Z + yOff, Y + zOff]);
+
+                        } else {
+                            const vz=sliceIndex, vx=quad.x, vy=quad.y;
+                            const X1=vx*vsize, X2=(vx+quad.w)*vsize;
+                            const Y1=vy*vsize, Y2=(vy+quad.h)*vsize;
+                            const Z=vz*vsize;
+
+                            if(dir===-1) faceVerts=[[X1,Y1,Z],[X2,Y1,Z],[X2,Y2,Z],[X1,Y2,Z]];
+                            else faceVerts=[[X1,Y1,Z+vsize],[X1,Y2,Z+vsize],[X2,Y2,Z+vsize],[X2,Y1,Z+vsize]];
+                            faceName = dir===-1?'north':'south';
+
+                            if (dir === -1) faceVerts.reverse();
+
+                            // Z faces: swap Y/Z for Y-up
+                            faceVerts = faceVerts.map(([X,Y,Z]) => [X + xOff, Z + yOff, Y + zOff]);
+                        }
+
+                        return { faceVerts, faceName };
+                    }
 		
 					function processVoxels() {
-						var colors = []
-						var group = new Group(typeof file_path === 'string' ? pathToName(file_path) : 'voxel_file').init().addTo()
-						var vsize = 16/settings.edit_size.value;
-						if (Format.canvas_limit && !settings.deactivate_size_limit.value) vsize = 16 / Math.max(data.size.x, data.size.y, data.size.z)
-						Canvas.buildGrid()
-						var i = 0
-						console.log(data)
-						var matrix = {}
-						function getFromMatrix(x, y, z) {
-							if (matrix[x] && matrix[x][y] && matrix[x][y][z]) {
-								return matrix[x][y][z];
-							} else {
-								return false;
-							}
-						}
-						function expandTo(box, axis, direction, color, write) {
-							var axisNumber = getAxisNumber(axis)
-							//u, v, layer
-							var layer = direction ? (box[axis+'2']+1) : (box[axis]-1)
-							var u_axis = getAxisLetter((axisNumber + 1) % 3)
-							var v_axis = getAxisLetter((axisNumber + 2) % 3)
-		
-							for (	var u = box[u_axis]; u <= box[u_axis+'2']; u++) {
-								for (var v = box[v_axis]; v <= box[v_axis+'2']; v++) {
-		
-									let coords = {}
-									coords[u_axis] = u
-									coords[v_axis] = v
-									coords[axis] = layer
-		
-									let voxel = getFromMatrix(coords.x, coords.y, coords.z)
-									if (!voxel || voxel.processed || voxel.colorIndex !== color) {
-										return false;
-									} else if (write) {
-										voxel.processed = true;
-									}
-								}
-							}
-							if (!write) {
-								//mark voxels as processed
-								expandTo(box, axis, direction, color, true)
-								//Box
-								if (direction) {
-									box[axis+'2']++;
-								} else {
-									box[axis]--;
-								}
-								return true;
-							}
-						}
-						
-						//Setup Matrix
-						while (i < data.voxels.length) {
-							var voxel = data.voxels[i]
-							if (typeof matrix[voxel.x] !== 'object') {
-								matrix[voxel.x] = {}
-							}
-							if (typeof matrix[voxel.x][voxel.y] !== 'object') {
-								matrix[voxel.x][voxel.y] = {}
-							}
-							if (typeof matrix[voxel.x][voxel.y][voxel.z] !== 'object') {
-								matrix[voxel.x][voxel.y][voxel.z] = voxel
-							}
-							i++;
-						}
-		
-						//Scan Model
-						i = 0;
-						while (i < data.voxels.length) {
-							var voxel = data.voxels[i]
-							if (!voxel.processed) {
-								voxel.processed = true
-								var box = {
-									x:  voxel.x, y:  voxel.y, z:  voxel.z,
-									x2: voxel.x, y2: voxel.y, z2: voxel.z
-								}
-								var safety_i = 0
-								var can_expand = [true, true, true, true, true, true]
-								while (can_expand.includes(true) && safety_i < 1024) {
-									can_expand[0] = can_expand[0] && expandTo(box, 'x', true,  voxel.colorIndex)
-									can_expand[1] = can_expand[1] && expandTo(box, 'x', false, voxel.colorIndex)
-									can_expand[2] = can_expand[2] && expandTo(box, 'y', true,  voxel.colorIndex)
-									can_expand[3] = can_expand[3] && expandTo(box, 'y', false, voxel.colorIndex)
-									can_expand[4] = can_expand[4] && expandTo(box, 'z', true,  voxel.colorIndex)
-									can_expand[5] = can_expand[5] && expandTo(box, 'z', false, voxel.colorIndex)
-									safety_i++;
-								}
-								//Cube
-								var cube = new Cube({
-									from: [
-										box.x * vsize,
-										box.z * vsize,
-										box.y * vsize,
-									],
-									to:   [
-										(box.x2+1) * vsize,
-										(box.z2+1) * vsize,
-										(box.y2+1) * vsize,
-									],
-									name: 'voxel',
-									box_uv: false,
-									display: {
-										autouv: 0
-									}
-								}).addTo(group, false).init()
-		
-								//Color
-								var color = data.palette[voxel.colorIndex]
-								color = color.a + '_' + color.b + '_' + color.g + '_' + color.r
-								var createNew = true
-								colors.forEach(function(c) {
-									if (c.string === color) {
-										createNew = false
-										c.elements.push(cube)
-									}
-								})
-								if (createNew === true) {
-									colors.push({
-										string: color,
-										elements: [cube]
-									})
-								}
-		
-							}
-							i++;
-						}
-						/*
-							var voxel = data.voxels[i]
-		
-							//Cube
-							var cube = new Cube().extend({
-								from: [
-									voxel.x * vsize,
-									voxel.z * vsize,
-									voxel.y * vsize
-								],
-								to:   [
-									(voxel.x+1) * vsize,
-									(voxel.z+1) * vsize,
-									(voxel.y+1) * vsize
-								],
-								name: 'voxel',
-								display: {
-									autouv: false
-								}
-							}).addTo(group, false)
-							elements.push(cube)
-		
-							//Color
-							var color = data.palette[voxel.colorIndex]
-							color = color.a + '_' + color.b + '_' + color.g + '_' + color.r
-							var createNew = true
-							colors.forEach(function(c) {
-								if (c.string === color) {
-									createNew = false
-									c.elements.push(cube)
-								}
-							})
-							if (createNew === true) {
-								colors.push({
-									string: color,
-									elements: [cube]
-								})
-							}*/
-		
-						var pos = {x: 0, y: 0}
-						colors.forEach(function(c) {
-							c.elements.forEach(function(s) {
-								for (var face in s.faces) {
-									if (s.faces.hasOwnProperty(face)) {
-										s.faces[face].uv = [
-											pos.x + 0.25,
-											pos.y + 0.25,
-											pos.x + 0.75,
-											pos.y + 0.75
-										]
-									}
-								}
-							})
-							c.position = {x: pos.x, y: pos.y}
-							//Position for next pixel
-							if (pos.x > 14) {
-								pos.x = 0
-								if (pos.y > 14) {
-									pos = {x: 15, z: 15}
-								} else {
-									pos.y += 1
-								}
-							} else {
-								pos.x += 1
-							}
-						})
-		
-						TextureGenerator.addBitmap({
-							res: 16,
-							color: new tinycolor(0x00000000),
-							name: 'voxel_palette',
-							folder: 'blocks',
-							particle: true
-						}, function (texture) {
-							group.select()
-							texture.load(_ => {
-		
-								texture.edit(function(canvas) {
-									let ctx = canvas.getContext('2d');
-									colors.forEach(function(c) {
-										var c_vals = c.string.split('_')
-										c_vals.forEach(function(cv, cvi) {
-											c_vals[cvi] = parseInt(cv)
-										})
-										//var hex_color = Jimp.rgbaToInt(c_vals[3], c_vals[2], c_vals[1], c_vals[0])
-										let hex_color = tinycolor({r: c_vals[3], g: c_vals[2], b: c_vals[1], a: c_vals[0]}).toRgbString();
-										ctx.fillStyle = hex_color
-										ctx.fillRect(c.position.x, c.position.y, 1, 1);
-										console.log(hex_color, c.position, c)
-									})
-								})
-							})
-							/*
-							*/
-							texture.apply(true)
-						})
-						Canvas.updateAll()
-					}
-					if (data.voxels.length > 6000 && Blockbench.showMessageBox) {
-						Blockbench.showMessageBox({
-							title: 'Warning',
-							icon: 'warning',
-							buttons: ['Continue', 'Cancel'],
-							message: 'This file contains too many voxels ('+data.voxels.length+'). Importing it might freeze or crash Blockbench.'
-						}, function (result) {
-							if (result === 0) {
-								processVoxels()
-							}
-						})
-					} else {
-						processVoxels()
-					}
+                        let voxels = new Map();
+
+                        data.voxels.forEach(({ x, y, z, colorIndex }) => {
+                            voxels.set(`${x},${y},${z}`, colorIndex);
+                        });
+
+                        let vertices = []; // array of {x,y,z} objects — required by Blockbench Face API
+                        let faceDefs = []; // { indices: [i0,i1,i2,i3], color, faceName }
+
+                        // Sweep along X
+                        for (let x = 0; x < sx; x++) {
+                            for (let dir of [-1, 1]) {
+                                let grid = Array.from({ length: sz }, () => Array(sy).fill(null));
+                                for (let y = 0; y < sy; y++) {
+                                    for (let z = 0; z < sz; z++) {
+                                        const c = voxels.get(`${x},${y},${z}`);
+                                        const neighbor = voxels.get(`${x + dir},${y},${z}`);
+                                        if (c && !neighbor) grid[z][y] = c;
+                                    }
+                                }
+                                let quads = greedyMesh2D(grid, sy, sz);
+                                quads.forEach(q => {
+                                    const paletteEntry = data.palette[q.color - 1];
+                                    const hex = paletteToHex(paletteEntry);
+                                    const { faceVerts, faceName } = collectQuadVerts('x', x, q, dir);
+                                    const baseIndex = vertices.length;
+                                    vertices.push(...faceVerts);
+                                    faceDefs.push({ indices: [baseIndex, baseIndex + 1, baseIndex + 2, baseIndex + 3], color: hex, faceName });
+                                });
+                            }
+                        }
+
+                        // Sweep along Y
+                        for (let y = 0; y < sy; y++) {
+                            for (let dir of [-1, 1]) {
+                                let grid = Array.from({ length: sz }, () => Array(sx).fill(null));
+                                for (let x = 0; x < sx; x++) {
+                                    for (let z = 0; z < sz; z++) {
+                                        const c = voxels.get(`${x},${y},${z}`);
+                                        const neighbor = voxels.get(`${x},${y + dir},${z}`);
+                                        if (c && !neighbor) grid[z][x] = c;
+                                    }
+                                }
+                                let quads = greedyMesh2D(grid, sx, sz);
+                                quads.forEach(q => {
+                                    const paletteEntry = data.palette[q.color - 1];
+                                    const hex = paletteToHex(paletteEntry);
+                                    const { faceVerts, faceName } = collectQuadVerts('y', y, q, dir);
+                                    const baseIndex = vertices.length;
+                                    vertices.push(...faceVerts);
+                                    faceDefs.push({ indices: [baseIndex, baseIndex + 1, baseIndex + 2, baseIndex + 3], color: hex, faceName });
+                                });
+                            }
+                        }
+
+                        // Sweep along Z
+                        for (let z = 0; z < sz; z++) {
+                            for (let dir of [-1, 1]) {
+                                let grid = Array.from({ length: sy }, () => Array(sx).fill(null));
+                                for (let x = 0; x < sx; x++) {
+                                    for (let y = 0; y < sy; y++) {
+                                        const c = voxels.get(`${x},${y},${z}`);
+                                        const neighbor = voxels.get(`${x},${y},${z + dir}`);
+                                        if (c && !neighbor) grid[y][x] = c;
+                                    }
+                                }
+                                let quads = greedyMesh2D(grid, sx, sy);
+                                quads.forEach(q => {
+                                    const paletteEntry = data.palette[q.color - 1];
+                                    const hex = paletteToHex(paletteEntry);
+                                    const { faceVerts, faceName } = collectQuadVerts('z', z, q, dir);
+                                    const baseIndex = vertices.length;
+                                    vertices.push(...faceVerts);
+                                    faceDefs.push({ indices: [baseIndex, baseIndex + 1, baseIndex + 2, baseIndex + 3], color: hex, faceName });
+                                });
+                            }
+                        }
+
+                        let mesh = new Mesh({ name: "VoxMesh" });
+                        if (Group.all.length === 0) new Group({ name: "Vox Import" }).init();
+                        mesh.addTo(Group.all[0]);
+                        mesh.init();
+
+                        mesh.vertices = {};
+                        vertices.forEach((v, i) => {
+                            mesh.vertices[String(i)] = v;
+                        });
+
+                        let facesObj = {};
+                        let createdFaces = 0;
+
+                        faceDefs.forEach((def, i) => {
+                            if (!def.indices || def.indices.length !== 4) {
+                                console.warn("Skipping invalid face def", i, def);
+                                return;
+                            }
+
+                            const vertexKeys = def.indices.map(idx => String(idx));
+
+                            const missing = vertexKeys.some(k => typeof mesh.vertices[Number(k)] === 'undefined');
+                            if (missing) {
+                                console.warn("Skipping face referencing missing vertex:", i, vertexKeys);
+                                return;
+                            }
+
+                            try {
+                                const mf = new MeshFace(mesh, {
+                                    vertices: vertexKeys,
+                                    uv: [[0,0],[1,0],[1,1],[0,1]],
+                                    texture: null,
+                                    color: def.color
+                                });
+
+                                if (!mf || !mf.vertices || mf.vertices.length === 0) {
+                                    console.warn("MeshFace returned empty for index", i, mf);
+                                    return;
+                                }
+
+                                facesObj['f' + i] = mf;
+                                createdFaces++;
+                            } catch (err) {
+                                console.error("Failed to create MeshFace for", i, err);
+                            }
+                        });
+
+                        mesh.faces = facesObj;
+                        console.log("MeshFaces created:", createdFaces, "from defs:", faceDefs.length);
+
+                        Canvas.updateAll();
+                    }
+
+                    processVoxels();
+
 				})
 			}
 		})
