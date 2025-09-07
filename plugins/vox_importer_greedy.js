@@ -128,6 +128,28 @@ BBPlugin.register('vox_importer_greedy', {
 
                         return { faceVerts, faceName };
                     }
+
+                    function deduplicateVertices(vertices, faceDefs) {
+                        const vertexMap = new Map(); // key = "x,y,z", value = new index
+                        const newVertices = [];
+                        
+                        faceDefs.forEach(def => {
+                            def.indices = def.indices.map(oldIdx => {
+                                const v = vertices[oldIdx];
+                                const key = `${v[0]},${v[1]},${v[2]}`;
+                                if (vertexMap.has(key)) {
+                                    return vertexMap.get(key);
+                                } else {
+                                    const newIndex = newVertices.length;
+                                    newVertices.push(v);
+                                    vertexMap.set(key, newIndex);
+                                    return newIndex;
+                                }
+                            });
+                        });
+
+                        return newVertices;
+                    }
 		
 					function processVoxels() {
                         let voxels = new Map();
@@ -213,8 +235,10 @@ BBPlugin.register('vox_importer_greedy', {
                         mesh.addTo(Group.all[0]);
                         mesh.init();
 
+                        const dedupedVertices = deduplicateVertices(vertices, faceDefs);
+
                         mesh.vertices = {};
-                        vertices.forEach((v, i) => {
+                        dedupedVertices.forEach((v, i) => {
                             mesh.vertices[String(i)] = v;
                         });
 
@@ -222,18 +246,9 @@ BBPlugin.register('vox_importer_greedy', {
                         let createdFaces = 0;
 
                         faceDefs.forEach((def, i) => {
-                            if (!def.indices || def.indices.length !== 4) {
-                                console.warn("Skipping invalid face def", i, def);
-                                return;
-                            }
+                            if (!def.indices || def.indices.length !== 4) return;
 
                             const vertexKeys = def.indices.map(idx => String(idx));
-
-                            const missing = vertexKeys.some(k => typeof mesh.vertices[Number(k)] === 'undefined');
-                            if (missing) {
-                                console.warn("Skipping face referencing missing vertex:", i, vertexKeys);
-                                return;
-                            }
 
                             try {
                                 const mf = new MeshFace(mesh, {
@@ -243,10 +258,7 @@ BBPlugin.register('vox_importer_greedy', {
                                     color: def.color
                                 });
 
-                                if (!mf || !mf.vertices || mf.vertices.length === 0) {
-                                    console.warn("MeshFace returned empty for index", i, mf);
-                                    return;
-                                }
+                                if (!mf || !mf.vertices || mf.vertices.length === 0) return;
 
                                 facesObj['f' + i] = mf;
                                 createdFaces++;
@@ -256,7 +268,7 @@ BBPlugin.register('vox_importer_greedy', {
                         });
 
                         mesh.faces = facesObj;
-                        console.log("MeshFaces created:", createdFaces, "from defs:", faceDefs.length);
+                        console.log("MeshFaces created:", createdFaces);
 
                         Canvas.updateAll();
                     }
