@@ -82,47 +82,53 @@ BBPlugin.register('vox_importer_greedy', {
                         let faceName;
 
                         if (axis === 'x') {
+
                             const vx = sliceIndex, vy = quad.x, vz = quad.y;
                             const X = vx * vsize;
                             const Y1 = vz * vsize, Y2 = (vz + quad.h) * vsize;
                             const Z1 = vy * vsize, Z2 = (vy + quad.w) * vsize;
 
-                            if (dir === -1) faceVerts = [[X,Y1,Z1],[X,Y2,Z1],[X,Y2,Z2],[X,Y1,Z2]]; // west
-                            else faceVerts = [[X+vsize,Y1,Z1],[X+vsize,Y1,Z2],[X+vsize,Y2,Z2],[X+vsize,Y2,Z1]]; // east
-                            faceName = dir===-1?'west':'east';
+                            if (dir === -1) {
+                                faceVerts = [[X, Y1, Z2], [X, Y2, Z2], [X, Y2, Z1], [X, Y1, Z1]];
+                                faceName = 'west';
+                            } else {
+                                faceVerts = [[X+vsize, Y1, Z1], [X+vsize, Y2, Z1], [X+vsize, Y2, Z2], [X+vsize, Y1, Z2]];
+                                faceName = 'east';
+                            }
 
-                            if (dir === -1) faceVerts.reverse();
-
-                            // X faces: no Y/Z swap
                             faceVerts = faceVerts.map(([X,Y,Z]) => [X + xOff, Y + yOff, Z + zOff]);
 
                         } else if (axis === 'y') {
-                            const vy=sliceIndex, vx=quad.x, vz=quad.y;
-                            const X1=vx*vsize, X2=(vx+quad.w)*vsize;
-                            const Y=vy*vsize, Z1=vz*vsize, Z2=(vz+quad.h)*vsize;
 
-                            if(dir===-1) faceVerts=[[X1,Y,Z1],[X2,Y,Z1],[X2,Y,Z2],[X1,Y,Z2]]; // down
-                            else faceVerts=[[X1,Y+vsize,Z1],[X1,Y+vsize,Z2],[X2,Y+vsize,Z2],[X2,Y+vsize,Z1]]; // up
-                            faceName = dir===-1?'down':'up';
+                            const vy = sliceIndex, vx = quad.x, vz = quad.y;
+                            const X1 = vx*vsize, X2 = (vx+quad.w)*vsize;
+                            const Y = vy*vsize, Z1 = vz*vsize, Z2 = (vz+quad.h)*vsize;
 
-                            if (dir === -1) faceVerts.reverse();
+                            if (dir === -1) {
+                                faceVerts = [[X1, Y, Z2], [X2, Y, Z2], [X2, Y, Z1], [X1, Y, Z1]];
+                                faceName = 'down';
+                            } else {
+                                faceVerts = [[X1, Y+vsize, Z1], [X2, Y+vsize, Z1], [X2, Y+vsize, Z2], [X1, Y+vsize, Z2]];
+                                faceName = 'up';
+                            }
 
-                            // Y faces: swap Y/Z for Y-up
                             faceVerts = faceVerts.map(([X,Y,Z]) => [X + xOff, Z + yOff, Y + zOff]);
 
                         } else {
-                            const vz=sliceIndex, vx=quad.x, vy=quad.y;
-                            const X1=vx*vsize, X2=(vx+quad.w)*vsize;
-                            const Y1=vy*vsize, Y2=(vy+quad.h)*vsize;
-                            const Z=vz*vsize;
 
-                            if(dir===-1) faceVerts=[[X1,Y1,Z],[X2,Y1,Z],[X2,Y2,Z],[X1,Y2,Z]];
-                            else faceVerts=[[X1,Y1,Z+vsize],[X1,Y2,Z+vsize],[X2,Y2,Z+vsize],[X2,Y1,Z+vsize]];
-                            faceName = dir===-1?'north':'south';
+                            const vz = sliceIndex, vx = quad.x, vy = quad.y;
+                            const X1 = vx*vsize, X2 = (vx+quad.w)*vsize;
+                            const Y1 = vy*vsize, Y2 = (vy+quad.h)*vsize;
+                            const Z = vz*vsize;
 
-                            if (dir === -1) faceVerts.reverse();
+                            if (dir === -1) {
+                                faceVerts = [[X1,Y1,Z],[X2,Y1,Z],[X2,Y2,Z],[X1,Y2,Z]];
+                                faceName = 'north';
+                            } else {
+                                faceVerts = [[X1,Y1,Z+vsize],[X1,Y2,Z+vsize],[X2,Y2,Z+vsize],[X2,Y1,Z+vsize]];
+                                faceName = 'south';
+                            }
 
-                            // Z faces: swap Y/Z for Y-up
                             faceVerts = faceVerts.map(([X,Y,Z]) => [X + xOff, Z + yOff, Y + zOff]);
                         }
 
