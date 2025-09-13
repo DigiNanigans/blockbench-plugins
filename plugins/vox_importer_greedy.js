@@ -39,6 +39,71 @@ BBPlugin.register('vox_importer_greedy', {
 
                     const { x: sx, y: sy, z: sz } = data.size;
 
+                    function placeFaceUVInTexture(meshFace, vox) {
+
+                        let u0, u1, v0, v1, corners;
+
+                        if (vox.axis === 'z') {
+                            u0 = Math.round(vox.x);
+                            u1 = Math.round(vox.x + vox.w);
+                            v0 = Math.round(vox.y);
+                            v1 = Math.round(vox.y + vox.h);
+
+                            corners = [
+                                [u0, v0],
+                                [u0, v1],
+                                [u1, v1],
+                                [u1, v0],
+                            ];
+                        } else if (vox.axis === 'y') {
+
+                            if (vox.dir === 1) {
+                                u0 = Math.round(vox.x);
+                                u1 = Math.round(vox.x + vox.w);
+                                v0 = Math.round(sx * 2 - vox.y);
+                                v1 = Math.round(sx * 2 - vox.y - vox.h);
+                            } else {
+                                u0 = Math.round(sx - vox.x);
+                                u1 = Math.round(sx - vox.x - vox.w);
+                                v1 = Math.round(sx * 2 - vox.y);
+                                v0 = Math.round(sx * 2 - vox.y - vox.h);
+                            }
+
+                            corners = [
+                                [u0, v0],
+                                [u1, v0],
+                                [u1, v1],
+                                [u0, v1],
+                            ];
+                        } else {
+                            if (vox.dir === -1) {
+                                u0 = Math.round(vox.x);
+                                u1 = Math.round(vox.x + vox.w);
+                                v0 = Math.round(sx * 2 - vox.y);
+                                v1 = Math.round(sx * 2 - vox.y - vox.h);
+                            } else {
+                                u0 = Math.round(sx - vox.x);
+                                u1 = Math.round(sx - vox.x - vox.w);
+                                v1 = Math.round(sx * 2 - vox.y);
+                                v0 = Math.round(sx * 2 - vox.y - vox.h);
+                            }
+
+                            corners = [
+                                [u0, v0],
+                                [u0, v1],
+                                [u1, v1],
+                                [u1, v0],
+                            ];
+                        }
+
+                        const keys = meshFace.vertices; // array of vertex keys (strings)
+                        for (let i = 0; i < keys.length; i++) {
+                            const uvx = Math.round(corners[i][0]);
+                            const uvy = Math.round(corners[i][1]);
+                            meshFace.uv[keys[i]] = [uvx, uvy];
+                        }
+                    }
+
                     function paletteToHex(p) {
                         if (!p) return '#ffffff';
                         return `#${((1 << 24) + (p.r << 16) + (p.g << 8) + p.b).toString(16).slice(1)}`;
@@ -184,10 +249,27 @@ BBPlugin.register('vox_importer_greedy', {
                                 quads.forEach(q => {
                                     const paletteEntry = data.palette[q.color - 1];
                                     const hex = paletteToHex(paletteEntry);
+
+                                    const vox = {
+                                        axis: 'x',
+                                        sliceIndex: x,
+                                        x: q.x,
+                                        y: q.y,
+                                        w: q.w,
+                                        h: q.h,
+                                        dir: dir
+                                    };
+
                                     const { faceVerts, faceName } = collectQuadVerts('x', x, q, dir);
                                     const baseIndex = vertices.length;
                                     vertices.push(...faceVerts);
-                                    faceDefs.push({ indices: [baseIndex, baseIndex + 1, baseIndex + 2, baseIndex + 3], color: hex, faceName });
+
+                                    faceDefs.push({
+                                        indices: [baseIndex, baseIndex + 1, baseIndex + 2, baseIndex + 3],
+                                        color: hex,
+                                        faceName,
+                                        vox
+                                    });
                                 });
                             }
                         }
@@ -209,10 +291,27 @@ BBPlugin.register('vox_importer_greedy', {
                                 quads.forEach(q => {
                                     const paletteEntry = data.palette[q.color - 1];
                                     const hex = paletteToHex(paletteEntry);
+
+                                    const vox = {
+                                        axis: 'y',
+                                        sliceIndex: y,
+                                        x: q.x,
+                                        y: q.y,
+                                        w: q.w,
+                                        h: q.h,
+                                        dir: dir
+                                    };
+
                                     const { faceVerts, faceName } = collectQuadVerts('y', y, q, dir);
                                     const baseIndex = vertices.length;
                                     vertices.push(...faceVerts);
-                                    faceDefs.push({ indices: [baseIndex, baseIndex + 1, baseIndex + 2, baseIndex + 3], color: hex, faceName });
+
+                                    faceDefs.push({
+                                        indices: [baseIndex, baseIndex + 1, baseIndex + 2, baseIndex + 3],
+                                        color: hex,
+                                        faceName,
+                                        vox
+                                    });
                                 });
                             }
                         }
@@ -232,10 +331,27 @@ BBPlugin.register('vox_importer_greedy', {
                                 quads.forEach(q => {
                                     const paletteEntry = data.palette[q.color - 1];
                                     const hex = paletteToHex(paletteEntry);
+
+                                    const vox = {
+                                        axis: 'z',
+                                        sliceIndex: z,
+                                        x: q.x,
+                                        y: q.y,
+                                        w: q.w,
+                                        h: q.h,
+                                        dir: dir
+                                    };
+
                                     const { faceVerts, faceName } = collectQuadVerts('z', z, q, dir);
                                     const baseIndex = vertices.length;
                                     vertices.push(...faceVerts);
-                                    faceDefs.push({ indices: [baseIndex, baseIndex + 1, baseIndex + 2, baseIndex + 3], color: hex, faceName });
+
+                                    faceDefs.push({
+                                        indices: [baseIndex, baseIndex + 1, baseIndex + 2, baseIndex + 3],
+                                        color: hex,
+                                        faceName,
+                                        vox
+                                    });
                                 });
                             }
                         }
@@ -268,7 +384,7 @@ BBPlugin.register('vox_importer_greedy', {
                                     color: def.color
                                 });
 
-                                if (!mf || !mf.vertices || mf.vertices.length === 0) return;
+                                placeFaceUVInTexture(mf, def.vox);
 
                                 facesObj['f' + i] = mf;
                                 createdFaces++;
