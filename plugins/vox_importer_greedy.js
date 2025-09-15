@@ -4,6 +4,12 @@
 
 let import_vox_action;
 let vox = {};
+let config = {
+	merge_colors: true,
+	remove_bottom_faces: true,
+	remove_side_edges: true,
+	remove_top_edge: true
+}
 
 BBPlugin.register('vox_importer_greedy', {
 	title: 'Voxel Importer - Greedy',
@@ -13,6 +19,15 @@ BBPlugin.register('vox_importer_greedy', {
 	version: '0.0.1',
 	variant: 'both',
 	onload() {
+
+		try {
+			config = {
+				...config,
+				...JSON.parse(localStorage.getItem('tool_config.import_vox'))
+			};
+		} catch (err) {
+			console.error("Unable to load config", err);
+		}
 
 		import_vox_action = new Action({
 			id: 'import_vox',
@@ -34,7 +49,22 @@ BBPlugin.register('vox_importer_greedy', {
 						vox.ProcessVoxels(meshName, data);
 					});
 				});
-			}
+			},
+			tool_config: new ToolConfig('import_vox', {
+				id: 'import_vox',
+				title: 'Vox Import Settings',
+				buttons: ['dialog.ok'],
+				resizable: false,
+				form: {
+					merge_colors: { label: 'Merge colors', type: 'checkbox', value: true },
+					remove_bottom_faces: { label: 'Remove all -Y oriented faces', type: 'checkbox', value: true },
+					remove_side_edges: { label: 'Remove side faces at edge of voxel bounds', type: 'checkbox', value: true },
+					remove_top_edge: { label: 'Remove top face if at edge of voxel bounds', type: 'checkbox', value: true }
+				},
+				onFormChange(formConfig) {
+					config = formConfig
+				}
+			})
 		})
 		MenuBar.addAction(import_vox_action, 'file.import')
 	},
@@ -84,7 +114,8 @@ BBPlugin.register('vox_importer_greedy', {
 		// Sweep along X
 		for (let x = 0; x < size.x; x++) {
 			for (let dir of [-1, 1]) {
-				if ((dir === -1 && x === 0) || (dir === 1 && x === size.x - 1)) continue;
+				const isSideEdge = (dir === -1 && x === 0) || (dir === 1 && x === size.x - 1);
+				if (config.remove_side_edges && isSideEdge) continue;
 
 				let grid = Array.from({ length: size.z }, () => Array(size.y).fill(null));
 				for (let y = 0; y < size.y; y++) {
@@ -116,7 +147,8 @@ BBPlugin.register('vox_importer_greedy', {
 		// Sweep along Y
 		for (let y = 0; y < size.y; y++) {
 			for (let dir of [1, -1]) {
-				if ((dir === -1 && y === 0) || (dir === 1 && y === size.y - 1)) continue;
+				const isSideEdge = (dir === -1 && y === 0) || (dir === 1 && y === size.y - 1);
+				if (config.remove_side_edges && isSideEdge) continue;
 
 				let grid = Array.from({ length: size.z }, () => Array(size.x).fill(null));
 				for (let x = 0; x < size.x; x++) {
@@ -147,8 +179,10 @@ BBPlugin.register('vox_importer_greedy', {
 
 		// Sweep along Z
 		for (let z = 0; z < size.z; z++) {
-			for (let dir of [1]) {
-				if (z === size.z - 1) continue;
+			const dirs = config.remove_bottom_faces ? [1] : [1, -1];
+			for (let dir of dirs) {
+				const isTopEdge = z === size.z - 1 || z === 0;
+				if (config.remove_top_edge && isTopEdge) continue;
 
 				let grid = Array.from({ length: size.y }, () => Array(size.x).fill(null));
 				for (let x = 0; x < size.x; x++) {
