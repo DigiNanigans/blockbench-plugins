@@ -274,6 +274,8 @@ BBPlugin.register('vox_importer_greedy', {
                         // Sweep along Z
                         for (let z = 0; z < sz; z++) {
                             for (let dir of [1]) {
+                                if (z === sz - 1) continue;
+
                                 let grid = Array.from({ length: sy }, () => Array(sx).fill(null));
                                 for (let x = 0; x < sx; x++) {
                                     for (let y = 0; y < sy; y++) {
