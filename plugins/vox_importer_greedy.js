@@ -22,6 +22,8 @@ BBPlugin.register('vox_importer_greedy', {
 			condition: () => Project instanceof ModelProject,
 			click: function(ev) {
 
+                let fileName = 'vox';
+
 				function importVoxFile(cb) {
 					Blockbench.import({
 						extensions: ['vox'],
@@ -29,6 +31,7 @@ BBPlugin.register('vox_importer_greedy', {
 						readtype: 'binary',
 					}, (files) => {
 						console.log(files);
+                        fileName = files[0].name.split('.')[0];
 						vox.mainParser.parseUint8Array(new Uint8Array(files[0].content), cb)
 					})
 				}
@@ -305,9 +308,7 @@ BBPlugin.register('vox_importer_greedy', {
                             }
                         }
 
-                        let mesh = new Mesh({ name: "VoxMesh" });
-                        if (Group.all.length === 0) new Group({ name: "Vox Import" }).init();
-                        mesh.addTo(Group.all[0]);
+                        let mesh = new Mesh({ name: fileName });
                         mesh.init();
 
                         const dedupedVertices = deduplicateVertices(vertices, faceDefs);
