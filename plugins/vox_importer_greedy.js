@@ -181,7 +181,7 @@ BBPlugin.register('vox_importer_greedy', {
 		for (let z = 0; z < size.z; z++) {
 			const dirs = config.remove_bottom_faces ? [1] : [1, -1];
 			for (let dir of dirs) {
-				const isTopEdge = z === size.z - 1 || z === 0;
+				const isTopEdge = (dir === 1 && z === size.z - 1) || (dir === -1 && z === 0);
 				if (config.remove_top_edge && isTopEdge) continue;
 
 				let grid = Array.from({ length: size.y }, () => Array(size.x).fill(null));
